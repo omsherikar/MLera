@@ -1,0 +1,83 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@700&family=Montserrat:wght@700&family=Inter:wght@400;500;600&display=swap');
+
+:root {
+  --transition-speed: 0.15s;
+}
+
+/* Only transition theme-related properties on body and main containers */
+body {
+  transition: background-color 0.15s ease-out;
+}
+
+body {
+  font-family: 'Inter', sans-serif;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: 'Poppins', 'Montserrat', sans-serif;
+  font-weight: 700;
+}
+
+@layer utilities {
+  .gradient-text {
+    @apply bg-gradient-to-r from-accent-pink to-accent-purple bg-clip-text text-transparent;
+  }
+  
+  .gradient-border {
+    @apply border-t-4 border-transparent bg-gradient-to-r from-accent-pink to-accent-purple;
+  }
+
+  /* Blue slider styling */
+  .slider-blue {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 8px;
+    border-radius: 4px;
+    outline: none;
+    --progress: 0%;
+  }
+
+  .slider-blue::-webkit-slider-runnable-track {
+    width: 100%;
+    height: 8px;
+    border-radius: 4px;
+    background: linear-gradient(to right, #3B82F6 0%, #3B82F6 var(--progress), #ffffff var(--progress), #ffffff 100%);
+  }
+
+  .slider-blue::-moz-range-track {
+    width: 100%;
+    height: 8px;
+    border-radius: 4px;
+    background: linear-gradient(to right, #3B82F6 0%, #3B82F6 var(--progress), #ffffff var(--progress), #ffffff 100%);
+  }
+
+  .slider-blue::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #3B82F6;
+    cursor: pointer;
+    border: 2px solid #ffffff;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    margin-top: -5px;
+  }
+
+  .slider-blue::-moz-range-thumb {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #3B82F6;
+    cursor: pointer;
+    border: 2px solid #ffffff;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    -moz-appearance: none;
+  }
+}
+
