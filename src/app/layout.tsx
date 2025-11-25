@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/context/ThemeContext";
+import { StreakProvider } from "@/context/StreakContext";
 import MathJaxLoader from "@/components/MathJaxLoader";
 
 const inter = Inter({ subsets: ["latin"] });
@@ -20,8 +21,10 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body className={inter.className}>
         <ThemeProvider>
-          <MathJaxLoader />
-          {children}
+          <StreakProvider>
+            <MathJaxLoader />
+            {children}
+          </StreakProvider>
         </ThemeProvider>
       </body>
     </html>

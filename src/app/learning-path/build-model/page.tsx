@@ -1,123 +1,153 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import Navbar from "@/components/Navbar";
 import Breadcrumb from "@/components/Breadcrumb";
 import ContentHeader from "@/components/ContentHeader";
 import SectionCard from "@/components/SectionCard";
-import { ChevronDown, Target, ChevronLeft, ChevronRight, Play } from "lucide-react";
+import { ChevronDown, Target, ChevronLeft, ChevronRight, Play, Pause, Loader2 } from "lucide-react";
 import { useTheme } from "@/context/ThemeContext";
 import { ScatterChart, Scatter, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, LineChart, Line, Area, AreaChart, ComposedChart } from "recharts";
-
-interface DatasetRow {
-  x: number;
-  y: number;
-}
+import { DATASETS, getDatasetByName, DataPoint } from "@/constants/datasets";
+import { MODEL_CONFIG, CHART_CONFIG, HYPERPARAMETER_PRESETS } from "@/constants/modelConfig";
+import { useLinearRegression, generateRegressionLine } from "@/hooks/useLinearRegression";
+import { useStreak } from "@/context/StreakContext";
 
 export default function BuildModelPage() {
   const { theme } = useTheme();
-  const [selectedDataset, setSelectedDataset] = useState("Sales Revenue");
+  const { completeModule } = useStreak();
+  const [selectedDatasetName, setSelectedDatasetName] = useState(DATASETS[0].name);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isHyperparamsDropdownOpen, setIsHyperparamsDropdownOpen] = useState(false);
   const [hoveredOption, setHoveredOption] = useState<string | null>(null);
   const [showTable, setShowTable] = useState(false);
-  const [learningRate, setLearningRate] = useState(0.05);
-  const [iterations, setIterations] = useState(100);
-  const [currentIteration, setCurrentIteration] = useState(10);
+  const [learningRate, setLearningRate] = useState<number>(MODEL_CONFIG.learningRate.default);
+  const [iterations, setIterations] = useState<number>(MODEL_CONFIG.iterations.default);
+  const [currentIteration, setCurrentIteration] = useState(1);
   const [isPlaying, setIsPlaying] = useState(false);
   const [modelBuilt, setModelBuilt] = useState(false);
+  const [isBuilding, setIsBuilding] = useState(false);
+  const [trainingData, setTrainingData] = useState<DataPoint[]>([]);
+  const [trainingLR, setTrainingLR] = useState<number>(MODEL_CONFIG.learningRate.default);
+  const [trainingIters, setTrainingIters] = useState<number>(MODEL_CONFIG.iterations.default);
+  const [timeSpent, setTimeSpent] = useState(0);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const hyperparamsDropdownRef = useRef<HTMLDivElement>(null);
 
+  // Get current dataset
+  const selectedDataset = useMemo(() => 
+    getDatasetByName(selectedDatasetName) || DATASETS[0], 
+    [selectedDatasetName]
+  );
+
+  // Train model using real gradient descent
+  const { beta0, beta1, cost, history, isTraining } = useLinearRegression(
+    trainingData,
+    trainingLR,
+    trainingIters
+  );
+
   const handleBuildModel = () => {
-    setModelBuilt(true);
-    setCurrentIteration(10);
-    console.log("Building model with:", { selectedDataset, learningRate, iterations });
+    setIsBuilding(true);
+    setModelBuilt(false);
+    setCurrentIteration(1);
+    
+    // Simulate building delay for better UX
+    setTimeout(() => {
+      setTrainingData(selectedDataset.data);
+      setTrainingLR(learningRate);
+      setTrainingIters(iterations);
+      setIsBuilding(false);
+      setModelBuilt(true);
+    }, MODEL_CONFIG.animation.buildDelay);
   };
 
   const handleReset = () => {
-    setLearningRate(0.05);
-    setIterations(100);
-    setSelectedDataset("Sales Revenue");
-    setCurrentIteration(10);
+    setLearningRate(MODEL_CONFIG.learningRate.default);
+    setIterations(MODEL_CONFIG.iterations.default);
+    setSelectedDatasetName(DATASETS[0].name);
+    setCurrentIteration(1);
     setIsPlaying(false);
     setModelBuilt(false);
+    setIsBuilding(false);
+    setTrainingData([]);
   };
 
   const handlePrevious = () => {
     if (currentIteration > 1) {
       setCurrentIteration(currentIteration - 1);
+      setIsPlaying(false);
     }
   };
 
   const handleNext = () => {
-    if (currentIteration < iterations) {
+    if (currentIteration < trainingIters) {
       setCurrentIteration(currentIteration + 1);
     }
   };
 
-  const handlePlay = () => {
+  const handlePlayPause = () => {
     setIsPlaying(!isPlaying);
   };
 
-  // Generate cost data for the cost chart
-  const costData = Array.from({ length: 10 }, (_, i) => {
-    const theta = 0.050 + i * 0.035;
-    const cost = 0.55 - (i * 0.04);
-    return { theta: theta.toFixed(3), cost: cost.toFixed(2) };
-  });
+  // Auto-play functionality
+  useEffect(() => {
+    if (!isPlaying || !modelBuilt) return;
 
-  const datasets = ["Sales Revenue", "Housing Prices", "Salary vs Experience"];
+    if (currentIteration < trainingIters) {
+      const timer = setTimeout(() => {
+        setCurrentIteration(prev => prev + 1);
+      }, MODEL_CONFIG.animation.playbackSpeed);
+      return () => clearTimeout(timer);
+    } else {
+      setIsPlaying(false);
+    }
+  }, [isPlaying, currentIteration, trainingIters, modelBuilt]);
 
-  const datasetDescriptions: Record<string, string> = {
-    "Sales Revenue": "Sales Revenue Dataset\nThis dataset shows the relationship between marketing budget (in thousands of dollars) and sales revenue (in thousands of dollars). It demonstrates how increased marketing investment typically leads to higher sales revenue, making it ideal for understanding positive linear correlation in business contexts.",
-    "Housing Prices": "Housing Prices Dataset\nThis dataset contains information about house sizes (in square meters) and their corresponding prices (in thousands of dollars). It's perfect for understanding how property size affects market value and demonstrates real estate pricing patterns through linear regression.",
-    "Salary vs Experience": "Salary vs Experience Dataset\nThis dataset illustrates the relationship between years of professional experience and annual salary (in dollars). It shows how career progression and accumulated experience typically result in higher compensation, making it excellent for understanding career growth patterns.",
-  };
+  // Get current iteration data
+  const currentIterationData = useMemo(() => {
+    if (!modelBuilt || history.length === 0) return null;
+    return history[Math.min(currentIteration - 1, history.length - 1)];
+  }, [modelBuilt, history, currentIteration]);
 
-  const datasetData: Record<string, { headers: [string, string], rows: DatasetRow[] }> = {
-    "Sales Revenue": {
-      headers: ["Marketing Budget (thousands $)", "Sales Revenue (thousands $)"],
-      rows: [
-        { x: 25, y: 120 },
-        { x: 28, y: 130 },
-        { x: 30, y: 145 },
-        { x: 33, y: 157 },
-        { x: 35, y: 160 },
-        { x: 40, y: 180 },
-        { x: 42, y: 185 },
-        { x: 45, y: 195 },
-        { x: 47, y: 205 },
-        { x: 50, y: 210 },
-        { x: 55, y: 230 },
-        { x: 60, y: 250 },
-      ],
-    },
-    "Housing Prices": {
-      headers: ["House Size (square meters)", "Price (thousands $)"],
-      rows: [
-        { x: 50, y: 150 },
-        { x: 60, y: 180 },
-        { x: 70, y: 210 },
-        { x: 80, y: 240 },
-        { x: 90, y: 270 },
-        { x: 100, y: 300 },
-        { x: 110, y: 330 },
-      ],
-    },
-    "Salary vs Experience": {
-      headers: ["Years of Experience", "Annual Salary ($)"],
-      rows: [
-        { x: 1, y: 45000 },
-        { x: 2, y: 50000 },
-        { x: 3, y: 55000 },
-        { x: 4, y: 60000 },
-        { x: 5, y: 65000 },
-        { x: 6, y: 70000 },
-        { x: 7, y: 75000 },
-      ],
-    },
-  };
+  // Generate regression line for current iteration
+  const regressionLineData = useMemo(() => {
+    if (!currentIterationData) return [];
+    return generateRegressionLine(
+      selectedDataset.xDomain[0],
+      selectedDataset.xDomain[1],
+      currentIterationData.beta0,
+      currentIterationData.beta1
+    );
+  }, [currentIterationData, selectedDataset]);
+
+  // Cost history data for chart (iteration vs cost)
+  const costChartData = useMemo(() => {
+    if (!modelBuilt || history.length === 0) return [];
+    return history.slice(0, currentIteration).map(h => ({
+      iteration: h.iteration,
+      cost: h.cost
+    }));
+  }, [modelBuilt, history, currentIteration]);
+
+  // Track time spent on page
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setTimeSpent((prev) => prev + 1);
+    }, 1000);
+
+    return () => {
+      clearInterval(interval);
+      // Complete module when leaving page if model was built and spent >= 5 minutes
+      if (modelBuilt && timeSpent >= 300) {
+        completeModule(
+          "build-linear-regression-model",
+          "Build Linear Regression Model",
+          timeSpent
+        );
+      }
+    };
+  }, [timeSpent, modelBuilt, completeModule]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -165,27 +195,29 @@ export default function BuildModelPage() {
               onClick={() => setIsDropdownOpen(!isDropdownOpen)}
               className="w-full px-4 py-3 bg-white text-gray-900 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-purple-500 flex items-center justify-between"
             >
-              <span>{selectedDataset}</span>
+              <span>{selectedDataset.name}</span>
               <ChevronDown className={`w-5 h-5 text-gray-600 transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`} />
             </button>
             {isDropdownOpen && (
               <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg">
-                {datasets.map((dataset, index) => (
-                  <div key={dataset}>
+                {DATASETS.map((dataset, index) => (
+                  <div key={dataset.id}>
                     {index > 0 && <hr className="border-gray-200" />}
                     <button
                       type="button"
                       onClick={() => {
-                        setSelectedDataset(dataset);
+                        setSelectedDatasetName(dataset.name);
                         setIsDropdownOpen(false);
+                        setModelBuilt(false);
+                        setCurrentIteration(1);
                       }}
-                      onMouseEnter={() => setHoveredOption(dataset)}
+                      onMouseEnter={() => setHoveredOption(dataset.name)}
                       onMouseLeave={() => setHoveredOption(null)}
                       className={`w-full px-4 py-3 text-left text-gray-900 hover:bg-gray-100 transition-colors ${
-                        selectedDataset === dataset || hoveredOption === dataset ? 'bg-gray-100' : 'bg-white'
+                        selectedDatasetName === dataset.name || hoveredOption === dataset.name ? 'bg-gray-100' : 'bg-white'
                       }`}
                     >
-                      {dataset}
+                      {dataset.name}
                     </button>
                   </div>
                 ))}
@@ -200,7 +232,7 @@ export default function BuildModelPage() {
             <p className={`whitespace-pre-line leading-relaxed ${
               theme === "dark" ? "text-white" : "text-gray-800"
             }`}>
-              {datasetDescriptions[selectedDataset]}
+              {selectedDataset.description}
             </p>
           </div>
           
@@ -221,7 +253,7 @@ export default function BuildModelPage() {
             <div className="mt-8">
               <h3 className={`text-2xl font-bold mb-4 ${
                 theme === "dark" ? "text-white" : "text-gray-800"
-              }`}>{selectedDataset} Dataset</h3>
+              }`}>{selectedDataset.name} Dataset</h3>
               <div className={`rounded-xl overflow-hidden border transition-colors duration-150 ${
                 theme === "dark" 
                   ? "bg-[#2B0B4B] border-purple-500/30" 
@@ -233,17 +265,17 @@ export default function BuildModelPage() {
                       <th className={`px-6 py-4 text-left font-semibold ${
                         theme === "dark" ? "text-white" : "text-gray-800"
                       }`}>
-                        {datasetData[selectedDataset].headers[0]}
+                        {selectedDataset.xLabel}
                       </th>
                       <th className={`px-6 py-4 text-left font-semibold ${
                         theme === "dark" ? "text-white" : "text-gray-800"
                       }`}>
-                        {datasetData[selectedDataset].headers[1]}
+                        {selectedDataset.yLabel}
                       </th>
                     </tr>
                   </thead>
                   <tbody>
-                    {datasetData[selectedDataset].rows.map((row, index) => (
+                    {selectedDataset.data.map((row, index) => (
                       <tr
                         key={index}
                         className={
@@ -272,52 +304,52 @@ export default function BuildModelPage() {
               <div className="rounded-xl overflow-hidden bg-gray-50 dark:bg-[#3A1B5B] transition-colors duration-150 border-2 border-purple-200 dark:border-purple-400/60 shadow-xl dark:shadow-purple-900/30 ring-2 ring-purple-100 dark:ring-purple-800/30 p-6">
                 <div className="rounded-lg overflow-hidden bg-gradient-to-r from-accent-pink to-accent-purple p-4">
                   <h3 className="text-white font-semibold text-center text-sm">
-                    {selectedDataset === "Sales Revenue" ? "Market Dataset Preview" : `${selectedDataset} Dataset Preview`}
+                    {selectedDataset.name} Dataset Preview
                   </h3>
                 </div>
                 <div className={`rounded-b-lg p-4 transition-colors duration-150 ${
                   theme === "dark" ? "bg-[#2B0B4B]" : "bg-white"
                 }`}>
-                  <ResponsiveContainer width="100%" height={400}>
-                    <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
+                  <ResponsiveContainer width="100%" height={CHART_CONFIG.scatter.height}>
+                    <ScatterChart margin={CHART_CONFIG.scatter.margin}>
                       <CartesianGrid 
-                        strokeDasharray="3 3" 
+                        strokeDasharray={CHART_CONFIG.grid.strokeDasharray}
                         stroke={theme === "dark" ? "#4A2B6B" : "#E0E0E0"} 
-                        strokeOpacity={0.6} 
+                        strokeOpacity={CHART_CONFIG.grid.strokeOpacity}
                       />
                       <XAxis
                         type="number"
                         dataKey="x"
                         label={{ 
-                          value: datasetData[selectedDataset].headers[0], 
+                          value: selectedDataset.xLabel, 
                           position: "insideBottom", 
-                          offset: -5, 
-                          style: { fill: theme === "dark" ? "#E9C3FF" : "#4A3566", fontSize: "14px" } 
+                          offset: CHART_CONFIG.axis.labelOffset, 
+                          style: { fill: theme === "dark" ? "#E9C3FF" : "#4A3566", fontSize: CHART_CONFIG.axis.labelFontSize } 
                         }}
                         stroke={theme === "dark" ? "#E9C3FF" : "#4A3566"}
-                        tick={{ fill: theme === "dark" ? "#E9C3FF" : "#4A3566", fontSize: 12 }}
-                        domain={selectedDataset === "Sales Revenue" ? [25, 60] : ['dataMin - 5', 'dataMax + 5']}
-                        ticks={selectedDataset === "Sales Revenue" ? [25, 30, 35, 40, 45, 50, 55, 60] : undefined}
+                        tick={{ fill: theme === "dark" ? "#E9C3FF" : "#4A3566", fontSize: CHART_CONFIG.axis.fontSize }}
+                        domain={selectedDataset.xDomain}
+                        ticks={selectedDataset.xTicks}
                       />
                       <YAxis
                         type="number"
                         dataKey="y"
                         label={{ 
-                          value: datasetData[selectedDataset].headers[1], 
+                          value: selectedDataset.yLabel, 
                           angle: -90, 
                           position: "insideLeft", 
-                          style: { fill: theme === "dark" ? "#E9C3FF" : "#4A3566", fontSize: "14px" } 
+                          style: { fill: theme === "dark" ? "#E9C3FF" : "#4A3566", fontSize: CHART_CONFIG.axis.labelFontSize } 
                         }}
                         stroke={theme === "dark" ? "#E9C3FF" : "#4A3566"}
-                        tick={{ fill: theme === "dark" ? "#E9C3FF" : "#4A3566", fontSize: 12 }}
-                        domain={selectedDataset === "Sales Revenue" ? [120, 260] : ['dataMin - 10', 'dataMax + 10']}
-                        ticks={selectedDataset === "Sales Revenue" ? [120, 140, 160, 180, 200, 220, 240, 260] : undefined}
+                        tick={{ fill: theme === "dark" ? "#E9C3FF" : "#4A3566", fontSize: CHART_CONFIG.axis.fontSize }}
+                        domain={selectedDataset.yDomain}
+                        ticks={selectedDataset.yTicks}
                       />
                       <Tooltip
                         contentStyle={{
                           backgroundColor: theme === "dark" ? "rgba(42, 11, 75, 0.95)" : "rgba(255, 255, 255, 0.95)",
                           border: theme === "dark" ? "1px solid #A66BFF" : "1px solid #A66BFF",
-                          borderRadius: "8px",
+                          borderRadius: CHART_CONFIG.tooltip.borderRadius,
                           color: theme === "dark" ? "#E9C3FF" : "#4A3566",
                         }}
                         labelStyle={{ color: theme === "dark" ? "#E9C3FF" : "#4A3566" }}
@@ -329,9 +361,9 @@ export default function BuildModelPage() {
                         verticalAlign="top"
                       />
                       <Scatter
-                        data={datasetData[selectedDataset].rows}
+                        data={selectedDataset.data}
                         dataKey="y"
-                        fill="#4169E1"
+                        fill={CHART_CONFIG.scatter.dataPointColor}
                         name="Data Points"
                         shape="circle"
                       />
@@ -378,51 +410,25 @@ export default function BuildModelPage() {
                 </tr>
               </thead>
               <tbody>
-                <tr className={`border-t ${
-                  theme === "dark" ? "border-white/10" : "border-gray-200"
-                } ${
-                  theme === "dark" ? "bg-[#3A1B5B]" : "bg-white"
-                }`}>
-                  <td className={`px-6 py-4 ${
-                    theme === "dark" ? "text-white" : "text-gray-800"
-                  }`}>0.001 - 0.005</td>
-                  <td className={`px-6 py-4 ${
-                    theme === "dark" ? "text-white" : "text-gray-800"
-                  }`}>300 - 500</td>
-                  <td className={`px-6 py-4 ${
-                    theme === "dark" ? "text-white" : "text-gray-800"
-                  }`}>Slow, stable convergence (good for complex datasets)</td>
-                </tr>
-                <tr className={`border-t ${
-                  theme === "dark" ? "border-white/10" : "border-gray-200"
-                } ${
-                  theme === "dark" ? "bg-[#2B0B4B]" : "bg-gray-50"
-                }`}>
-                  <td className={`px-6 py-4 ${
-                    theme === "dark" ? "text-white" : "text-gray-800"
-                  }`}>0.01 - 0.05</td>
-                  <td className={`px-6 py-4 ${
-                    theme === "dark" ? "text-white" : "text-gray-800"
-                  }`}>100 - 300</td>
-                  <td className={`px-6 py-4 ${
-                    theme === "dark" ? "text-white" : "text-gray-800"
-                  }`}>Balanced convergence (recommended starting point)</td>
-                </tr>
-                <tr className={`border-t ${
-                  theme === "dark" ? "border-white/10" : "border-gray-200"
-                } ${
-                  theme === "dark" ? "bg-[#3A1B5B]" : "bg-white"
-                }`}>
-                  <td className={`px-6 py-4 ${
-                    theme === "dark" ? "text-white" : "text-gray-800"
-                  }`}>0.05 - 0.1</td>
-                  <td className={`px-6 py-4 ${
-                    theme === "dark" ? "text-white" : "text-gray-800"
-                  }`}>50 - 100</td>
-                  <td className={`px-6 py-4 ${
-                    theme === "dark" ? "text-white" : "text-gray-800"
-                  }`}>Fast convergence, potential instability (for simple datasets)</td>
-                </tr>
+                {HYPERPARAMETER_PRESETS.map((preset, index) => (
+                  <tr key={index} className={`border-t ${
+                    theme === "dark" ? "border-white/10" : "border-gray-200"
+                  } ${
+                    theme === "dark" 
+                      ? index % 2 === 0 ? "bg-[#3A1B5B]" : "bg-[#2B0B4B]"
+                      : index % 2 === 0 ? "bg-white" : "bg-gray-50"
+                  }`}>
+                    <td className={`px-6 py-4 ${
+                      theme === "dark" ? "text-white" : "text-gray-800"
+                    }`}>{preset.learningRate}</td>
+                    <td className={`px-6 py-4 ${
+                      theme === "dark" ? "text-white" : "text-gray-800"
+                    }`}>{preset.iterations}</td>
+                    <td className={`px-6 py-4 ${
+                      theme === "dark" ? "text-white" : "text-gray-800"
+                    }`}>{preset.effect}</td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
@@ -432,41 +438,46 @@ export default function BuildModelPage() {
           </p>
 
           {/* Interactive Controls */}
-          <div className="flex items-end gap-4 flex-wrap mb-20">
-            {/* Dataset Selection */}
-            <div className="flex-1 min-w-[200px]">
+          <div className="flex items-end gap-4 flex-wrap mb-6">
+            {/* Dataset Dropdown for Training */}
+            <div className="flex-1 min-w-[200px] relative z-10">
               <label className={`block mb-2 ${theme === "dark" ? "text-white" : "text-gray-800"}`}>
-                Dataset for Model:
+                Dataset for Training:
               </label>
               <div className="relative w-full" ref={hyperparamsDropdownRef}>
                 <button
                   type="button"
-                  onClick={() => setIsHyperparamsDropdownOpen(!isHyperparamsDropdownOpen)}
-                  className="w-full px-4 py-3 bg-white text-gray-900 rounded-lg border-2 border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500 flex items-center justify-between transition-colors"
+                  onClick={() => !isBuilding && setIsHyperparamsDropdownOpen(!isHyperparamsDropdownOpen)}
+                  disabled={isBuilding}
+                  className={`w-full px-4 py-3 rounded-lg border-2 focus:outline-none focus:ring-2 focus:ring-purple-500 flex items-center justify-between transition-colors ${
+                    isBuilding 
+                      ? 'bg-gray-200 cursor-not-allowed border-gray-300' 
+                      : 'bg-white hover:border-purple-400 border-purple-300'
+                  }`}
                 >
-                  <span>{selectedDataset}</span>
+                  <span className="text-gray-900">{selectedDataset.name}</span>
                   <ChevronDown className={`w-5 h-5 text-gray-600 transition-transform ${isHyperparamsDropdownOpen ? 'rotate-180' : ''}`} />
                 </button>
-                {isHyperparamsDropdownOpen && (
-                  <div className="absolute z-50 w-full mt-1 bg-white border-2 border-purple-500 rounded-lg shadow-lg">
-                    {datasets.map((dataset, index) => (
-                      <div key={dataset}>
+                {isHyperparamsDropdownOpen && !isBuilding && (
+                  <div className="absolute z-[100] w-full mt-1 bg-white border-2 border-purple-500 rounded-lg shadow-lg overflow-hidden">
+                    {DATASETS.map((dataset, index) => (
+                      <div key={dataset.id}>
                         {index > 0 && <hr className="border-gray-200" />}
                         <button
                           type="button"
                           onClick={() => {
-                            setSelectedDataset(dataset);
+                            setSelectedDatasetName(dataset.name);
                             setIsHyperparamsDropdownOpen(false);
+                            setModelBuilt(false);
+                            setCurrentIteration(1);
                           }}
-                          onMouseEnter={() => setHoveredOption(dataset)}
+                          onMouseEnter={() => setHoveredOption(dataset.name)}
                           onMouseLeave={() => setHoveredOption(null)}
-                          className={`w-full px-4 py-3 text-left text-gray-900 transition-colors ${
-                            selectedDataset === dataset || hoveredOption === dataset
-                              ? "bg-gray-100"
-                              : "bg-white"
+                          className={`w-full px-4 py-3 text-left text-gray-900 hover:bg-gray-100 transition-colors ${
+                            selectedDatasetName === dataset.name || hoveredOption === dataset.name ? 'bg-gray-100' : 'bg-white'
                           }`}
                         >
-                          {dataset}
+                          {dataset.name}
                         </button>
                       </div>
                     ))}
@@ -478,18 +489,19 @@ export default function BuildModelPage() {
             {/* Learning Rate Slider */}
             <div className="flex-1 min-w-[200px]">
               <label className={`block mb-2 ${theme === "dark" ? "text-white" : "text-gray-800"}`}>
-                Learning Rate (α): {learningRate.toFixed(3)}
+                {MODEL_CONFIG.learningRate.label}: {learningRate.toFixed(3)}
               </label>
               <input
                 type="range"
-                min="0.001"
-                max="0.1"
-                step="0.001"
+                min={MODEL_CONFIG.learningRate.min}
+                max={MODEL_CONFIG.learningRate.max}
+                step={MODEL_CONFIG.learningRate.step}
                 value={learningRate}
                 onChange={(e) => setLearningRate(Number(e.target.value))}
+                disabled={isBuilding}
                 className="slider-blue w-full"
                 style={{
-                  '--progress': `${((learningRate - 0.001) / (0.1 - 0.001)) * 100}%`
+                  '--progress': `${((learningRate - MODEL_CONFIG.learningRate.min) / (MODEL_CONFIG.learningRate.max - MODEL_CONFIG.learningRate.min)) * 100}%`
                 } as React.CSSProperties}
               />
             </div>
@@ -497,18 +509,19 @@ export default function BuildModelPage() {
             {/* Iterations Slider */}
             <div className="flex-1 min-w-[200px]">
               <label className={`block mb-2 ${theme === "dark" ? "text-white" : "text-gray-800"}`}>
-                Iterations: {iterations}
+                {MODEL_CONFIG.iterations.label}: {iterations}
               </label>
               <input
                 type="range"
-                min="50"
-                max="500"
-                step="10"
+                min={MODEL_CONFIG.iterations.min}
+                max={MODEL_CONFIG.iterations.max}
+                step={MODEL_CONFIG.iterations.step}
                 value={iterations}
                 onChange={(e) => setIterations(Number(e.target.value))}
+                disabled={isBuilding}
                 className="slider-blue w-full"
                 style={{
-                  '--progress': `${((iterations - 50) / (500 - 50)) * 100}%`
+                  '--progress': `${((iterations - MODEL_CONFIG.iterations.min) / (MODEL_CONFIG.iterations.max - MODEL_CONFIG.iterations.min)) * 100}%`
                 } as React.CSSProperties}
               />
             </div>
@@ -517,31 +530,55 @@ export default function BuildModelPage() {
             <div className="flex gap-4">
               <button
                 onClick={handleBuildModel}
-                className="px-8 py-3 bg-[#FF6B4A] hover:bg-[#FF7B5A] text-white font-semibold rounded-lg transition-colors shadow-md whitespace-nowrap"
+                disabled={isBuilding}
+                className="px-8 py-3 bg-[#FF6B4A] hover:bg-[#FF7B5A] disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition-colors shadow-md whitespace-nowrap flex items-center gap-2"
               >
-                Build Model
+                {isBuilding ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    Building...
+                  </>
+                ) : (
+                  'Build Model'
+                )}
               </button>
               <button
                 onClick={handleReset}
-                className="px-8 py-3 bg-[#FF6B4A] hover:bg-[#FF7B5A] text-white font-semibold rounded-lg transition-colors shadow-md whitespace-nowrap"
+                disabled={isBuilding}
+                className="px-8 py-3 bg-[#FF6B4A] hover:bg-[#FF7B5A] disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition-colors shadow-md whitespace-nowrap"
               >
                 Reset
               </button>
             </div>
           </div>
+          
+          {/* Spacer for dropdown visibility */}
+          <div className="h-40"></div>
         </SectionCard>
 
         <SectionCard number={4} title="Model's Growth">
           <p className={`mb-6 ${theme === "dark" ? "text-white" : "text-gray-800"}`}>
-            {modelBuilt 
-              ? `Model built successfully. Use the controls to navigate through ${iterations} steps of training.`
-              : "Select a dataset and parameters, then click 'Build Model'."
-            }
+            {isBuilding ? (
+              <span className="flex items-center gap-2">
+                <Loader2 className="w-5 h-5 animate-spin" />
+                Training model with gradient descent...
+              </span>
+            ) : modelBuilt ? (
+              <>
+                Model trained successfully! Navigate through {trainingIters} iterations to see how parameters converge.
+                <br />
+                <span className="text-sm opacity-80">
+                  β₀ = {currentIterationData?.beta0.toFixed(4)}, β₁ = {currentIterationData?.beta1.toFixed(4)}, Cost = {currentIterationData?.cost.toFixed(4)}
+                </span>
+              </>
+            ) : (
+              "Select a dataset and parameters, then click 'Build Model'."
+            )}
           </p>
 
           {/* Navigation Controls - Only show when model is built */}
-          {modelBuilt && (
-            <div className="flex items-center gap-4 mb-8">
+          {modelBuilt && !isBuilding && (
+            <div className="flex items-center gap-4 mb-8 flex-wrap">
             <button
               onClick={handlePrevious}
               disabled={currentIteration === 1}
@@ -551,39 +588,51 @@ export default function BuildModelPage() {
               Previous
             </button>
             
-            <div className="flex-1">
+            <div className="flex-1 min-w-[200px]">
               <input
                 type="range"
                 min="1"
-                max={iterations}
+                max={trainingIters}
                 value={currentIteration}
-                onChange={(e) => setCurrentIteration(Number(e.target.value))}
+                onChange={(e) => {
+                  setCurrentIteration(Number(e.target.value));
+                  setIsPlaying(false);
+                }}
                 className="slider-blue w-full"
                 style={{
-                  '--progress': `${((currentIteration - 1) / (iterations - 1)) * 100}%`
+                  '--progress': `${((currentIteration - 1) / (trainingIters - 1)) * 100}%`
                 } as React.CSSProperties}
               />
             </div>
 
             <button
               onClick={handleNext}
-              disabled={currentIteration === iterations}
+              disabled={currentIteration === trainingIters}
               className="px-4 py-2 bg-[#FF6B4A] hover:bg-[#FF7B5A] disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition-colors flex items-center gap-2"
             >
               Next
               <ChevronRight className="w-5 h-5" />
             </button>
 
-            <span className={`px-4 py-2 ${theme === "dark" ? "text-white" : "text-gray-800"}`}>
-              Iteration: {currentIteration}/{iterations}
+            <span className={`px-4 py-2 ${theme === "dark" ? "text-white" : "text-gray-800"} whitespace-nowrap`}>
+              Iteration: {currentIteration}/{trainingIters}
             </span>
 
             <button
-              onClick={handlePlay}
+              onClick={handlePlayPause}
               className="px-4 py-2 bg-[#FF6B4A] hover:bg-[#FF7B5A] text-white font-semibold rounded-lg transition-colors flex items-center gap-2"
             >
-              <Play className="w-5 h-5" />
-              Play
+              {isPlaying ? (
+                <>
+                  <Pause className="w-5 h-5" />
+                  Pause
+                </>
+              ) : (
+                <>
+                  <Play className="w-5 h-5" />
+                  Play
+                </>
+              )}
             </button>
           </div>
           )}
@@ -600,46 +649,46 @@ export default function BuildModelPage() {
               <div className={`rounded-b-lg p-4 transition-colors duration-150 ${
                 theme === "dark" ? "bg-[#2B0B4B]" : "bg-white"
               }`}>
-                {modelBuilt ? (
-                <ResponsiveContainer width="100%" height={350}>
-                  <ComposedChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
+                {modelBuilt && currentIterationData ? (
+                <ResponsiveContainer width="100%" height={CHART_CONFIG.scatter.height}>
+                  <ComposedChart margin={CHART_CONFIG.scatter.margin}>
                     <CartesianGrid 
-                      strokeDasharray="3 3" 
+                      strokeDasharray={CHART_CONFIG.grid.strokeDasharray}
                       stroke={theme === "dark" ? "#4A2B6B" : "#E0E0E0"} 
-                      strokeOpacity={0.6} 
+                      strokeOpacity={CHART_CONFIG.grid.strokeOpacity}
                     />
                     <XAxis
                       type="number"
                       dataKey="x"
                       label={{ 
-                        value: datasetData[selectedDataset].headers[0], 
+                        value: selectedDataset.xLabel, 
                         position: "insideBottom", 
-                        offset: -5, 
-                        style: { fill: theme === "dark" ? "#E9C3FF" : "#4A3566", fontSize: "14px" } 
+                        offset: CHART_CONFIG.axis.labelOffset, 
+                        style: { fill: theme === "dark" ? "#E9C3FF" : "#4A3566", fontSize: CHART_CONFIG.axis.labelFontSize } 
                       }}
                       stroke={theme === "dark" ? "#E9C3FF" : "#4A3566"}
-                      tick={{ fill: theme === "dark" ? "#E9C3FF" : "#4A3566", fontSize: 12 }}
-                      domain={selectedDataset === "Sales Revenue" ? [25, 60] : ['dataMin - 5', 'dataMax + 5']}
-                      ticks={selectedDataset === "Sales Revenue" ? [25, 30, 35, 40, 45, 50, 55, 60] : undefined}
+                      tick={{ fill: theme === "dark" ? "#E9C3FF" : "#4A3566", fontSize: CHART_CONFIG.axis.fontSize }}
+                      domain={selectedDataset.xDomain}
+                      ticks={selectedDataset.xTicks}
                     />
                     <YAxis
                       type="number"
                       label={{ 
-                        value: datasetData[selectedDataset].headers[1], 
+                        value: selectedDataset.yLabel, 
                         angle: -90, 
                         position: "insideLeft", 
-                        style: { fill: theme === "dark" ? "#E9C3FF" : "#4A3566", fontSize: "14px" } 
+                        style: { fill: theme === "dark" ? "#E9C3FF" : "#4A3566", fontSize: CHART_CONFIG.axis.labelFontSize } 
                       }}
                       stroke={theme === "dark" ? "#E9C3FF" : "#4A3566"}
-                      tick={{ fill: theme === "dark" ? "#E9C3FF" : "#4A3566", fontSize: 12 }}
-                      domain={selectedDataset === "Sales Revenue" ? [120, 260] : ['dataMin - 10', 'dataMax + 10']}
-                      ticks={selectedDataset === "Sales Revenue" ? [120, 140, 160, 180, 200, 220, 240, 260] : undefined}
+                      tick={{ fill: theme === "dark" ? "#E9C3FF" : "#4A3566", fontSize: CHART_CONFIG.axis.fontSize }}
+                      domain={selectedDataset.yDomain}
+                      ticks={selectedDataset.yTicks}
                     />
                     <Tooltip
                       contentStyle={{
                         backgroundColor: theme === "dark" ? "rgba(42, 11, 75, 0.95)" : "rgba(255, 255, 255, 0.95)",
                         border: theme === "dark" ? "1px solid #A66BFF" : "1px solid #A66BFF",
-                        borderRadius: "8px",
+                        borderRadius: CHART_CONFIG.tooltip.borderRadius,
                         color: theme === "dark" ? "#E9C3FF" : "#4A3566",
                       }}
                       labelStyle={{ color: theme === "dark" ? "#E9C3FF" : "#4A3566" }}
@@ -651,42 +700,31 @@ export default function BuildModelPage() {
                       verticalAlign="top"
                     />
                     <Scatter
-                      data={datasetData[selectedDataset].rows}
+                      data={selectedDataset.data}
                       dataKey="y"
-                      fill="#4169E1"
+                      fill={CHART_CONFIG.scatter.dataPointColor}
                       name="Data Points"
                       shape="circle"
                     />
                     <Line
                       type="linear"
                       dataKey="y"
-                      data={(() => {
-                        const minX = Math.min(...datasetData[selectedDataset].rows.map(p => p.x));
-                        const maxX = Math.max(...datasetData[selectedDataset].rows.map(p => p.x));
-                        const minY = Math.min(...datasetData[selectedDataset].rows.map(p => p.y));
-                        const maxY = Math.max(...datasetData[selectedDataset].rows.map(p => p.y));
-                        const slope = (maxY - minY) / (maxX - minX);
-                        const intercept = minY - slope * minX;
-                        return Array.from({ length: 100 }, (_, i) => {
-                          const x = minX + (maxX - minX) * (i / 99);
-                          return { x, y: slope * x + intercept };
-                        });
-                      })()}
-                      stroke="#FF0000"
-                      strokeWidth={2}
+                      data={regressionLineData}
+                      stroke={CHART_CONFIG.line.regressionLineColor}
+                      strokeWidth={CHART_CONFIG.line.strokeWidth}
                       dot={false}
-                      name="Best Fit Line"
+                      name="Regression Line"
                       legendType="line"
                     />
                   </ComposedChart>
                 </ResponsiveContainer>
                 ) : (
-                <ResponsiveContainer width="100%" height={350}>
-                  <ComposedChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }} data={[{ x: 0, y: 0 }]}>
+                <ResponsiveContainer width="100%" height={CHART_CONFIG.scatter.height}>
+                  <ComposedChart margin={CHART_CONFIG.scatter.margin} data={[{ x: 0, y: 0 }]}>
                     <CartesianGrid 
-                      strokeDasharray="3 3" 
+                      strokeDasharray={CHART_CONFIG.grid.strokeDasharray}
                       stroke={theme === "dark" ? "#4A2B6B" : "#E0E0E0"} 
-                      strokeOpacity={0.6} 
+                      strokeOpacity={CHART_CONFIG.grid.strokeOpacity}
                     />
                     <XAxis
                       type="number"
@@ -694,13 +732,13 @@ export default function BuildModelPage() {
                       label={{ 
                         value: "X Values", 
                         position: "insideBottom", 
-                        offset: -5, 
-                        style: { fill: theme === "dark" ? "#E9C3FF" : "#4A3566", fontSize: "14px" } 
+                        offset: CHART_CONFIG.axis.labelOffset, 
+                        style: { fill: theme === "dark" ? "#E9C3FF" : "#4A3566", fontSize: CHART_CONFIG.axis.labelFontSize } 
                       }}
                       stroke={theme === "dark" ? "#E9C3FF" : "#4A3566"}
-                      tick={{ fill: theme === "dark" ? "#E9C3FF" : "#4A3566", fontSize: 12 }}
+                      tick={{ fill: theme === "dark" ? "#E9C3FF" : "#4A3566", fontSize: CHART_CONFIG.axis.fontSize }}
                       domain={[0, 1.0]}
-                      ticks={[0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]}
+                      ticks={[0, 0.2, 0.4, 0.6, 0.8, 1.0]}
                     />
                     <YAxis
                       type="number"
@@ -709,12 +747,12 @@ export default function BuildModelPage() {
                         value: "Y Values", 
                         angle: -90, 
                         position: "insideLeft", 
-                        style: { fill: theme === "dark" ? "#E9C3FF" : "#4A3566", fontSize: "14px" } 
+                        style: { fill: theme === "dark" ? "#E9C3FF" : "#4A3566", fontSize: CHART_CONFIG.axis.labelFontSize } 
                       }}
                       stroke={theme === "dark" ? "#E9C3FF" : "#4A3566"}
-                      tick={{ fill: theme === "dark" ? "#E9C3FF" : "#4A3566", fontSize: 12 }}
+                      tick={{ fill: theme === "dark" ? "#E9C3FF" : "#4A3566", fontSize: CHART_CONFIG.axis.fontSize }}
                       domain={[0, 1.0]}
-                      ticks={[0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]}
+                      ticks={[0, 0.2, 0.4, 0.6, 0.8, 1.0]}
                     />
                   </ComposedChart>
                 </ResponsiveContainer>
@@ -722,52 +760,50 @@ export default function BuildModelPage() {
               </div>
             </div>
 
-            {/* Right Chart: Parameter vs Cost */}
+            {/* Right Chart: Cost vs Iteration */}
             <div className="rounded-xl overflow-hidden bg-gray-50 dark:bg-[#3A1B5B] transition-colors duration-150 border-2 border-purple-200 dark:border-purple-400/60 shadow-xl dark:shadow-purple-900/30 ring-2 ring-purple-100 dark:ring-purple-800/30 p-6">
               <div className="rounded-lg overflow-hidden bg-gradient-to-r from-accent-pink to-accent-purple p-4 mb-4">
                 <h3 className="text-white font-semibold text-center text-sm">
-                  {modelBuilt ? `Parameter (θ) vs Cost (Iteration ${currentIteration})` : "Parameter vs Cost - Build a model to see results"}
+                  {modelBuilt ? `Cost Function Over Time (Iteration ${currentIteration})` : "Cost Function - Build a model to see results"}
                 </h3>
               </div>
               <div className={`rounded-b-lg p-4 transition-colors duration-150 ${
                 theme === "dark" ? "bg-[#2B0B4B]" : "bg-white"
               }`}>
-                {modelBuilt ? (
-                <ResponsiveContainer width="100%" height={350}>
-                  <AreaChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }} data={costData}>
+                {modelBuilt && costChartData.length > 0 ? (
+                <ResponsiveContainer width="100%" height={CHART_CONFIG.scatter.height}>
+                  <AreaChart margin={CHART_CONFIG.scatter.margin} data={costChartData}>
                     <CartesianGrid 
-                      strokeDasharray="3 3" 
+                      strokeDasharray={CHART_CONFIG.grid.strokeDasharray}
                       stroke={theme === "dark" ? "#4A2B6B" : "#E0E0E0"} 
-                      strokeOpacity={0.6} 
+                      strokeOpacity={CHART_CONFIG.grid.strokeOpacity}
                     />
                     <XAxis
-                      dataKey="theta"
+                      dataKey="iteration"
                       label={{ 
-                        value: "Parameter (θ)", 
+                        value: "Iteration", 
                         position: "insideBottom", 
-                        offset: -5, 
-                        style: { fill: theme === "dark" ? "#E9C3FF" : "#4A3566", fontSize: "14px" } 
+                        offset: CHART_CONFIG.axis.labelOffset, 
+                        style: { fill: theme === "dark" ? "#E9C3FF" : "#4A3566", fontSize: CHART_CONFIG.axis.labelFontSize } 
                       }}
                       stroke={theme === "dark" ? "#E9C3FF" : "#4A3566"}
-                      tick={{ fill: theme === "dark" ? "#E9C3FF" : "#4A3566", fontSize: 12 }}
+                      tick={{ fill: theme === "dark" ? "#E9C3FF" : "#4A3566", fontSize: CHART_CONFIG.axis.fontSize }}
                     />
                     <YAxis
                       label={{ 
-                        value: "Cost", 
+                        value: "Cost (MSE)", 
                         angle: -90, 
                         position: "insideLeft", 
-                        style: { fill: theme === "dark" ? "#E9C3FF" : "#4A3566", fontSize: "14px" } 
+                        style: { fill: theme === "dark" ? "#E9C3FF" : "#4A3566", fontSize: CHART_CONFIG.axis.labelFontSize } 
                       }}
                       stroke={theme === "dark" ? "#E9C3FF" : "#4A3566"}
-                      tick={{ fill: theme === "dark" ? "#E9C3FF" : "#4A3566", fontSize: 12 }}
-                      domain={[0.15, 0.55]}
-                      ticks={[0.15, 0.20, 0.25, 0.30, 0.35, 0.40, 0.45, 0.50, 0.55]}
+                      tick={{ fill: theme === "dark" ? "#E9C3FF" : "#4A3566", fontSize: CHART_CONFIG.axis.fontSize }}
                     />
                     <Tooltip
                       contentStyle={{
                         backgroundColor: theme === "dark" ? "rgba(42, 11, 75, 0.95)" : "rgba(255, 255, 255, 0.95)",
                         border: theme === "dark" ? "1px solid #A66BFF" : "1px solid #A66BFF",
-                        borderRadius: "8px",
+                        borderRadius: CHART_CONFIG.tooltip.borderRadius,
                         color: theme === "dark" ? "#E9C3FF" : "#4A3566",
                       }}
                       labelStyle={{ color: theme === "dark" ? "#E9C3FF" : "#4A3566" }}
@@ -781,45 +817,45 @@ export default function BuildModelPage() {
                     <Area
                       type="monotone"
                       dataKey="cost"
-                      stroke="#00D9FF"
-                      fill="#00D9FF"
+                      stroke={CHART_CONFIG.line.costLineColor}
+                      fill={CHART_CONFIG.line.costLineColor}
                       fillOpacity={0.3}
                       name="Cost"
                     />
                   </AreaChart>
                 </ResponsiveContainer>
                 ) : (
-                <ResponsiveContainer width="100%" height={350}>
-                  <AreaChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }} data={[{ theta: "0", cost: 0 }]}>
+                <ResponsiveContainer width="100%" height={CHART_CONFIG.scatter.height}>
+                  <AreaChart margin={CHART_CONFIG.scatter.margin} data={[{ iteration: 0, cost: 0 }]}>
                     <CartesianGrid 
-                      strokeDasharray="3 3" 
+                      strokeDasharray={CHART_CONFIG.grid.strokeDasharray}
                       stroke={theme === "dark" ? "#4A2B6B" : "#E0E0E0"} 
-                      strokeOpacity={0.6} 
+                      strokeOpacity={CHART_CONFIG.grid.strokeOpacity}
                     />
                     <XAxis
-                      dataKey="theta"
+                      dataKey="iteration"
                       label={{ 
-                        value: "Parameter (θ)", 
+                        value: "Iteration", 
                         position: "insideBottom", 
-                        offset: -5, 
-                        style: { fill: theme === "dark" ? "#E9C3FF" : "#4A3566", fontSize: "14px" } 
+                        offset: CHART_CONFIG.axis.labelOffset, 
+                        style: { fill: theme === "dark" ? "#E9C3FF" : "#4A3566", fontSize: CHART_CONFIG.axis.labelFontSize } 
                       }}
                       stroke={theme === "dark" ? "#E9C3FF" : "#4A3566"}
-                      tick={{ fill: theme === "dark" ? "#E9C3FF" : "#4A3566", fontSize: 12 }}
-                      domain={[0, 1]}
+                      tick={{ fill: theme === "dark" ? "#E9C3FF" : "#4A3566", fontSize: CHART_CONFIG.axis.fontSize }}
+                      domain={[0, 100]}
                     />
                     <YAxis
                       dataKey="cost"
                       label={{ 
-                        value: "Cost", 
+                        value: "Cost (MSE)", 
                         angle: -90, 
                         position: "insideLeft", 
-                        style: { fill: theme === "dark" ? "#E9C3FF" : "#4A3566", fontSize: "14px" } 
+                        style: { fill: theme === "dark" ? "#E9C3FF" : "#4A3566", fontSize: CHART_CONFIG.axis.labelFontSize } 
                       }}
                       stroke={theme === "dark" ? "#E9C3FF" : "#4A3566"}
-                      tick={{ fill: theme === "dark" ? "#E9C3FF" : "#4A3566", fontSize: 12 }}
+                      tick={{ fill: theme === "dark" ? "#E9C3FF" : "#4A3566", fontSize: CHART_CONFIG.axis.fontSize }}
                       domain={[0, 1.0]}
-                      ticks={[0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]}
+                      ticks={[0, 0.2, 0.4, 0.6, 0.8, 1.0]}
                     />
                   </AreaChart>
                 </ResponsiveContainer>

@@ -3,7 +3,10 @@
 import Link from "next/link";
 import { useState } from "react";
 import { useTheme } from "@/context/ThemeContext";
+import { useStreak } from "@/context/StreakContext";
 import ThemeToggle from "./ThemeToggle";
+import StreakModal from "./StreakModal";
+import { Flame } from "lucide-react";
 
 const navLinks = [
   { href: "/", label: "Home" },
@@ -17,7 +20,9 @@ const navLinks = [
 
 export default function Navbar() {
   const [hoveredLink, setHoveredLink] = useState<string | null>(null);
+  const [isStreakModalOpen, setIsStreakModalOpen] = useState(false);
   const { theme } = useTheme();
+  const { stats } = useStreak();
 
   return (
     <nav className={`fixed top-0 left-0 right-0 z-50 h-[60px] w-full shadow-sm transition-colors duration-150 ${
@@ -57,6 +62,15 @@ export default function Navbar() {
 
         {/* Right Side - Rightmost */}
         <div className="flex items-center space-x-4 absolute right-0 pr-6">
+          {/* Streak Counter */}
+            <button
+              onClick={() => setIsStreakModalOpen(true)}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-purple-700/50 dark:bg-white/10 border border-purple-500/30 dark:border-white/20 hover:bg-purple-600/60 dark:hover:bg-white/15 transition-colors cursor-pointer"
+            >
+              <Flame className={`w-4 h-4 ${stats.currentStreak > 0 ? 'text-orange-500' : 'text-gray-400'}`} />
+              <span className="text-sm font-semibold text-white">{stats.currentStreak}</span>
+            </button>
+          
           <ThemeToggle />
           <div className="w-10 h-10 rounded-full bg-[#FFB6C1] flex items-center justify-center overflow-hidden relative">
             <svg
@@ -79,6 +93,12 @@ export default function Navbar() {
           </div>
         </div>
       </div>
+      
+      {/* Streak Modal */}
+      <StreakModal 
+        isOpen={isStreakModalOpen} 
+        onClose={() => setIsStreakModalOpen(false)} 
+      />
     </nav>
   );
 }
