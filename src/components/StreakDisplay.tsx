@@ -3,10 +3,38 @@
 import { useStreak } from '@/context/StreakContext';
 import { useTheme } from '@/context/ThemeContext';
 import { Flame, Trophy, Target, Clock } from 'lucide-react';
+import { useEffect, useState } from 'react';
 
 export default function StreakDisplay() {
   const { stats } = useStreak();
   const { theme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted) {
+    return (
+      <div className={`rounded-xl p-4 border transition-colors duration-150 ${
+        theme === 'dark' 
+          ? 'bg-[#2B0B4B] border-purple-500/30' 
+          : 'bg-white border-gray-300'
+      }`}>
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <div className="flex items-center gap-3">
+            <div className={`p-2 rounded-lg ${theme === 'dark' ? 'bg-orange-500/20' : 'bg-orange-100'}`}>
+              <Flame className="w-6 h-6 text-gray-400" />
+            </div>
+            <div>
+              <p className={`text-2xl font-bold ${theme === 'dark' ? 'text-white' : 'text-gray-800'}`}>0</p>
+              <p className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>Day Streak</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={`rounded-xl p-4 border transition-colors duration-150 ${

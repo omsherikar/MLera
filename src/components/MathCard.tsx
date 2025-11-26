@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 interface MathCardProps {
   equation: string;
@@ -9,74 +9,60 @@ interface MathCardProps {
 
 declare global {
   interface Window {
-    MathJax?: {
-      typesetPromise: (elements: HTMLElement[]) => Promise<void>;
-      startup?: {
-        promise: Promise<void>;
-        ready: () => void;
-      };
-      typeset: (elements?: HTMLElement[]) => void;
-    };
+    katex?: any;
   }
 }
 
 export default function MathCard({ equation, className = "" }: MathCardProps) {
   const mathRef = useRef<HTMLDivElement>(null);
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    if (typeof window === "undefined" || !mathRef.current) return;
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!mounted || typeof window === "undefined" || !mathRef.current) return;
+
+    let attempts = 0;
+    const maxAttempts = 50;
 
     const renderMath = () => {
-      if (window.MathJax && mathRef.current) {
-        // Set the content first
-        mathRef.current.textContent = `$$${equation}$$`;
-        
-        // Wait for MathJax to be ready
-        const typeset = () => {
-          if (window.MathJax && mathRef.current) {
-            const mathJax = window.MathJax;
-            if (mathJax.typesetPromise) {
-              mathJax.typesetPromise([mathRef.current])
-                .catch((err) => {
-                  console.error("MathJax typeset error:", err);
-                  // Fallback
-                  if (mathJax.typeset) {
-                    mathJax.typeset([mathRef.current!]);
-                  }
-                });
-            } else if (mathJax.typeset) {
-              mathJax.typeset([mathRef.current]);
-            }
-          }
-        };
-
-        if (window.MathJax.startup && window.MathJax.startup.promise) {
-          window.MathJax.startup.promise.then(typeset).catch((err) => {
-            console.error("MathJax startup error:", err);
-            typeset(); // Try anyway
+      if (window.katex && mathRef.current) {
+        try {
+          window.katex.render(equation, mathRef.current, {
+            displayMode: true,
+            throwOnError: false,
           });
-        } else {
-          typeset();
+        } catch (error) {
+          console.error("KaTeX error:", error);
         }
       } else {
-        // Retry after a short delay
-        setTimeout(renderMath, 100);
+        attempts++;
+        if (attempts < maxAttempts) {
+          setTimeout(renderMath, 100);
+        }
       }
     };
 
-    // Initial render attempt
-    renderMath();
+    const timer = setTimeout(renderMath, 100);
 
-    // Listen for MathJax loaded event
-    const handleMathJaxLoaded = () => {
-      renderMath();
-    };
-    window.addEventListener('mathjax-loaded', handleMathJaxLoaded);
+    const handleKaTeXLoaded = () => renderMath();
+    window.addEventListener('katex-loaded', handleKaTeXLoaded);
 
     return () => {
-      window.removeEventListener('mathjax-loaded', handleMathJaxLoaded);
+      clearTimeout(timer);
+      window.removeEventListener('katex-loaded', handleKaTeXLoaded);
     };
-  }, [equation]);
+  }, [equation, mounted]);
+
+  if (!mounted) {
+    return (
+      <div className={`rounded-xl p-8 bg-gray-50 dark:bg-[#3A1B5B] border-l-4 border-[#FF8B6B] text-center transition-colors duration-150 ${className}`}>
+        <div className="text-lg min-h-[60px]" />
+      </div>
+    );
+  }
 
   return (
     <div
@@ -86,9 +72,7 @@ export default function MathCard({ equation, className = "" }: MathCardProps) {
         ref={mathRef}
         className="text-lg"
         suppressHydrationWarning
-      >
-        {`$$${equation}$$`}
-      </div>
+      />
     </div>
   );
 }

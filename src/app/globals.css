@@ -81,3 +81,34 @@ h1, h2, h3, h4, h5, h6 {
   }
 }
 
+/* KaTeX Styling */
+.katex {
+  font-size: 1.2em !important;
+}
+
+.katex-display {
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+/* Ensure KaTeX equations are visible in dark mode */
+.dark .katex {
+  color: #E9C3FF !important;
+}
+
+.dark .katex .mord,
+.dark .katex .mbin,
+.dark .katex .mrel,
+.dark .katex .mop,
+.dark .katex .mopen,
+.dark .katex .mclose,
+.dark .katex .mpunct,
+.dark .katex .minner {
+  color: #E9C3FF !important;
+}
+
+/* Light mode KaTeX */
+.katex {
+  color: #2d3748 !important;
+}
+

@@ -59,7 +59,7 @@ export default function LinearRegression() {
         <p>
           The simplest form of Linear Regression (Simple Linear Regression) can be expressed as:
         </p>
-        <MathCard equation="Y = \\beta_0 + \\beta_1 X + \\epsilon" />
+        <MathCard equation={String.raw`Y = \beta_0 + \beta_1 X + \epsilon`} />
         <p className="mt-4">Where:</p>
         <ul className="list-none space-y-2 ml-0">
           <li>
@@ -120,7 +120,7 @@ export default function LinearRegression() {
           For a dataset with n observations, the MSE is calculated as:
         </p>
         <div className="mt-4">
-          <MathCard equation="MSE = \\frac{1}{n} \\sum_{i=1}^{n} (y_i - \\hat{y}_i)^2" />
+          <MathCard equation={String.raw`MSE = \frac{1}{n} \sum_{i=1}^{n} (y_i - \hat{y}_i)^2`} />
         </div>
         <p className="mt-4">Where:</p>
         <ul className="list-none space-y-2 ml-0">
@@ -138,7 +138,7 @@ export default function LinearRegression() {
           Substituting our linear regression equation into MSE formula:
         </p>
         <div className="mt-4">
-          <MathCard equation="MSE = \\frac{1}{n} \\sum_{i=1}^{n} (y_i - (\\beta_0 + \\beta_1 x_i))^2" />
+          <MathCard equation={String.raw`MSE = \frac{1}{n} \sum_{i=1}^{n} (y_i - (\beta_0 + \beta_1 x_i))^2`} />
         </div>
         <p className="mt-6">
           We've defined the cost function (typically Mean Squared Error), the next step in Linear Regression is to minimize this error by finding the optimal values of the parameters:
@@ -171,9 +171,9 @@ export default function LinearRegression() {
           For a simple linear regression (one feature), the formulas are:
         </p>
         <p className="font-semibold mb-2 mt-4">Slope (β₁):</p>
-        <MathCard equation="\\beta_1 = \\frac{\\sum_{i=1}^{n} (x_i - \\bar{x})(y_i - \\bar{y})}{\\sum_{i=1}^{n} (x_i - \\bar{x})^2} = \\frac{Cov(x,y)}{Var(x)}" />
+        <MathCard equation={String.raw`\beta_1 = \frac{\sum_{i=1}^{n} (x_i - \bar{x})(y_i - \bar{y})}{\sum_{i=1}^{n} (x_i - \bar{x})^2} = \frac{Cov(x,y)}{Var(x)}`} />
         <div className="mt-4">
-          <MathCard equation="\\beta_0 = \\bar{y} - \\beta_1 \\bar{x}" />
+          <MathCard equation={String.raw`\beta_0 = \bar{y} - \beta_1 \bar{x}`} />
         </div>
         <p className="mt-4 mb-20">
           where <strong>x̄</strong> and <strong>ȳ</strong> are the means of the x and y values respectively.
@@ -221,10 +221,10 @@ export default function LinearRegression() {
         </p>
         <p className="font-semibold mb-2 mt-6">The update rules are:</p>
         <div className="mt-4">
-          <MathCard equation="\\beta_1 := \\beta_1 - \\alpha \\frac{\\partial J}{\\partial \\beta_1} = \\beta_1 - \\alpha \\frac{1}{m} \\sum_{i=1}^{m} (\\hat{y}_i - y_i) \\cdot x_i" />
+          <MathCard equation={String.raw`\beta_1 := \beta_1 - \alpha \frac{\partial J}{\partial \beta_1} = \beta_1 - \alpha \frac{1}{m} \sum_{i=1}^{m} (\hat{y}_i - y_i) \cdot x_i`} />
         </div>
         <div className="mt-4">
-          <MathCard equation="\\beta_0 := \\beta_0 - \\alpha \\frac{\\partial J}{\\partial \\beta_0} = \\beta_0 - \\alpha \\frac{1}{m} \\sum_{i=1}^{m} (\\hat{y}_i - y_i)" />
+          <MathCard equation={String.raw`\beta_0 := \beta_0 - \alpha \frac{\partial J}{\partial \beta_0} = \beta_0 - \alpha \frac{1}{m} \sum_{i=1}^{m} (\hat{y}_i - y_i)`} />
         </div>
         <p className="mt-6">Where:</p>
         <ul className="list-none space-y-2 ml-0 mt-4">

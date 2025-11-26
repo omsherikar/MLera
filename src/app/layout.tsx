@@ -3,7 +3,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/context/ThemeContext";
 import { StreakProvider } from "@/context/StreakContext";
-import MathJaxLoader from "@/components/MathJaxLoader";
+import KaTeXLoader from "@/components/KaTeXLoader";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -22,7 +22,7 @@ export default function RootLayout({
       <body className={inter.className}>
         <ThemeProvider>
           <StreakProvider>
-            <MathJaxLoader />
+            <KaTeXLoader />
             {children}
           </StreakProvider>
         </ThemeProvider>
